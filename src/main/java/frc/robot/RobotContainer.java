@@ -4,100 +4,81 @@
 
 package frc.robot;
 
-import edu.wpi.first.wpilibj.XboxController;
+import static edu.wpi.first.units.Units.MilliOhms;
+import static edu.wpi.first.units.Units.Volts;
+
+import edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap;
 import edu.wpi.first.wpilibj2.command.Command;
-import frc.robot.commands.ClimbUpDown;
-import frc.robot.commands.IntakeIn;
-import frc.robot.commands.ResetGyro;
-import frc.robot.commands.TeleopDrive;
-import frc.robot.commands.ToggleFeed;
-import frc.robot.commands.ToggleIntake;
-import frc.robot.commands.ToggleReverseIntake;
-import frc.robot.commands.ToggleShoot;
-import frc.robot.commands.auton.BasicAuto;
+import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
+import edu.wpi.first.wpilibj2.command.button.Trigger;
 import frc.robot.controllers.DriveController;
-import frc.robot.controllers.OperatorController;
 import frc.robot.controllers.SpektrumDriveController;
-import frc.robot.controllers.XboxOperatorController;
-import frc.robot.gyros.Gyro;
-import frc.robot.gyros.NavxGyro;
-import frc.robot.subsystems.Climb;
-import frc.robot.subsystems.Drive;
-import frc.robot.subsystems.Feed;
-import frc.robot.subsystems.Intake;
-import frc.robot.subsystems.Launcher;
+import frc.robot.subsystems.swervedrive.SwerveDriveSubsystem;
+//import frc.robot.subsystems.vision.LimelightVisionSubsystem;
+import yams.mechanisms.swerve.utility.SwerveInputStream;
+import yams.motorcontrollers.simulation.BatterySim;
 
 /**
- * This class is where the bulk of the robot should be declared. Since Command-based is a
- * "declarative" paradigm, very little robot logic should actually be handled in the {@link Robot}
- * periodic methods (other than the scheduler calls). Instead, the structure of the robot (including
- * subsystems, commands, and button mappings) should be declared here.
+ * This class is where the bulk of the robot should be declared. Since Command-based is a "declarative" paradigm, very
+ * little robot logic should actually be handled in the {@link Robot} periodic methods (other than the scheduler calls).
+ * Instead, the structure of the robot (including subsystems, commands, and trigger mappings) should be declared here.
  */
 public class RobotContainer {
+  final DriveController driveController = new SpektrumDriveController(0);
+  private final SwerveDriveSubsystem swerve = new SwerveDriveSubsystem();
 
-    // The robot's subsystems and commands are defined here...
-    private final Gyro gyro = new NavxGyro();
-    private final Launcher launcher = new Launcher();
-    private final Feed feed = new Feed();
-    //new XboxDriveController(new XboxController(Constants.kDriveController)),
-    private final DriveController driveController = new SpektrumDriveController(
-        Constants.kDriveController
-    );
-    private final Climb climb = new Climb();
+  private final SwerveInputStream driveStream = swerve.getAngularVelocityStream(driveController::getDriveX,
+                                                                                 driveController::getDriveY,
+                                                                                 driveController::getRotation)
+                                                       .withDeadband(0.05)
+                                                       .withAllianceRelativeControl();
+  public RobotContainer()
+  {
+    configureBatterySim();
+    configureBindings();
+  }
 
-    private final OperatorController operatorController =
-        new XboxOperatorController(
-            new XboxController(Constants.kOperatorController)
-        );
-    private final Drive drive = new Drive(gyro);
+  /**
+   * Configure the simulated battery's state-of-charge curve and discharge behavior.
+   */
+  private void configureBatterySim()
+  {
+    InterpolatingDoubleTreeMap wornBatteryCurve = new InterpolatingDoubleTreeMap();
+    wornBatteryCurve.put(0.00, 6.0);
+    wornBatteryCurve.put(0.05, 6.5);
+    wornBatteryCurve.put(0.10, 9.5);
+    wornBatteryCurve.put(0.20, 10.2);
+    wornBatteryCurve.put(0.40, 10.6);
+    wornBatteryCurve.put(0.60, 10.9);
+    wornBatteryCurve.put(0.80, 11.2);
+    wornBatteryCurve.put(0.90, 11.4);
+    wornBatteryCurve.put(1.00, 11.6);
+    BatterySim.replaceSOCInterpolation(wornBatteryCurve);
+    BatterySim.enableDischarge(18, Volts.of(11), MilliOhms.of(20));
+  }
 
-    private final Intake intake = new Intake();
+  /**
+   * Use this method to define your trigger->command mappings. Triggers can be created via the
+   * {@link Trigger#Trigger(java.util.function.BooleanSupplier)} constructor with an arbitrary predicate, or via the
+   * named factories in {@link edu.wpi.first.wpilibj2.command.button.CommandGenericHID}'s subclasses for
+   * {@link CommandXboxController Xbox}/{@link edu.wpi.first.wpilibj2.command.button.CommandPS4Controller PS4}
+   * controllers or {@link edu.wpi.first.wpilibj2.command.button.CommandJoystick Flight joysticks}.
+   */
+  private void configureBindings()
+  {
+    swerve.setDefaultCommand(swerve.drive(driveStream));
+    driveController.reset().onTrue(swerve.zeroGyro());
+  }
 
-    /** The container for the robot. Contains subsystems, OI devices, and commands. */
-    public RobotContainer() {
-        drive.setDefaultCommand(new TeleopDrive(driveController, drive, gyro));
+  /**
+   * Use this to pass the autonomous command to the main {@link Robot} class.
+   *
+   * @return the command to run in autonomous
+   */
+  public Command getAutonomousCommand()
+  {
+    // Pass in the selected auto from the SmartDashboard as our desired autnomous commmand
+    return null;
+  }
 
-        // Button mappings
-        bindButtons();
-    }
-
-    private void bindButtons() {
-        // Drive Controls
-        driveController.reset().onTrue(new ResetGyro(gyro));
-        driveController
-            .leftArmUp()
-            .whileTrue(new ClimbUpDown(climb, false, true));
-        driveController
-            .leftArmDown()
-            .whileTrue(new ClimbUpDown(climb, true, true));
-        driveController
-            .rightArmUp()
-            .whileTrue(new ClimbUpDown(climb, false, false));
-        driveController
-            .rightArmDown()
-            .whileTrue(new ClimbUpDown(climb, true, false));
-
-        // Operator Controls
-        operatorController
-            .extendIntake()
-            .whileTrue(new ToggleIntake(true, intake));
-        // operatorController.retractIntake().whileTrue(new ToggleIntake(false, intake));
-        operatorController
-            .retractIntake()
-            .whileTrue(new IntakeIn(false, intake));
-
-        operatorController
-            .reverseIntake()
-            .onTrue(new ToggleReverseIntake(intake, true));
-        operatorController
-            .reverseIntake()
-            .onFalse(new ToggleReverseIntake(intake, false));
-        // Launcher subcommands
-        operatorController.toggleFeeder().whileTrue(new ToggleFeed(feed, true));
-        operatorController.launch().whileTrue(new ToggleShoot(launcher, true));
-    }
-
-    public Command getAutonomousCommand() {
-        return new BasicAuto(drive, gyro);
-    }
 }
