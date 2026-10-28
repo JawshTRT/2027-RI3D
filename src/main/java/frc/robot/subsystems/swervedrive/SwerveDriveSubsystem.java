@@ -51,11 +51,11 @@ public class SwerveDriveSubsystem extends SubsystemBase {
             );
 
         SwerveParser.parse(
-            new File(Filesystem.getDeployDirectory(), "swerve/base")
+            new File(Filesystem.getDeployDirectory(), "swerve/swerve-config")
         );
+        gyro = new NavxGyro();
         SwerveDriveDevices devices = SwerveParser.createSwerveDriveDevices(cfg);
         drive = devices.swerveDrive();
-        gyro = new NavxGyro();
     }
 
     /**
